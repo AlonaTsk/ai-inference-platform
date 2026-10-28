@@ -1,0 +1,243 @@
+{
+  "environment": {
+    "measured_at": "2026-10-28T16:04:01+00:00",
+    "python": "3.13.16",
+    "torch": "2.11.0+cu130",
+    "cpu": "x86_64",
+    "cpu_threads_used": 1,
+    "logical_cpus": 2,
+    "cuda_available": true,
+    "gpu": "Tesla T4",
+    "gpu_memory_gb": 15.6,
+    "cuda_runtime": "13.0",
+    "cudnn": 92700
+  },
+  "train": {
+    "device": "cuda",
+    "seconds": 2.9,
+    "accuracy": 0.9312,
+    "macro_f1": 0.9312,
+    "n_test": 800
+  },
+  "settings": {
+    "batches": "1,32,256,1024,4096",
+    "warmup": 20,
+    "iters": 100,
+    "epochs": 8,
+    "fp16": true,
+    "require_cuda": true,
+    "json": "results/colab-gpu.json"
+  },
+  "results": [
+    {
+      "device": "cpu",
+      "batch": 1,
+      "compute": {
+        "p50_ms": 0.4504,
+        "p95_ms": 0.5294,
+        "texts_per_s": 2220
+      },
+      "end_to_end": {
+        "p50_ms": 0.4785,
+        "p95_ms": 0.5464,
+        "texts_per_s": 2090
+      }
+    },
+    {
+      "device": "cpu",
+      "batch": 32,
+      "compute": {
+        "p50_ms": 1.9121,
+        "p95_ms": 2.7761,
+        "texts_per_s": 16735
+      },
+      "end_to_end": {
+        "p50_ms": 1.8781,
+        "p95_ms": 2.0075,
+        "texts_per_s": 17038
+      }
+    },
+    {
+      "device": "cpu",
+      "batch": 256,
+      "compute": {
+        "p50_ms": 8.1144,
+        "p95_ms": 12.7849,
+        "texts_per_s": 31549
+      },
+      "end_to_end": {
+        "p50_ms": 8.0072,
+        "p95_ms": 10.0179,
+        "texts_per_s": 31971
+      }
+    },
+    {
+      "device": "cpu",
+      "batch": 1024,
+      "compute": {
+        "p50_ms": 31.6122,
+        "p95_ms": 38.2699,
+        "texts_per_s": 32393
+      },
+      "end_to_end": {
+        "p50_ms": 31.709,
+        "p95_ms": 38.0242,
+        "texts_per_s": 32294
+      }
+    },
+    {
+      "device": "cpu",
+      "batch": 4096,
+      "compute": {
+        "p50_ms": 129.2085,
+        "p95_ms": 143.9617,
+        "texts_per_s": 31701
+      },
+      "end_to_end": {
+        "p50_ms": 129.7745,
+        "p95_ms": 152.0792,
+        "texts_per_s": 31562
+      }
+    },
+    {
+      "device": "cuda",
+      "batch": 1,
+      "compute": {
+        "p50_ms": 0.1839,
+        "p95_ms": 0.2517,
+        "texts_per_s": 5437
+      },
+      "end_to_end": {
+        "p50_ms": 0.3445,
+        "p95_ms": 0.4757,
+        "texts_per_s": 2903
+      }
+    },
+    {
+      "device": "cuda",
+      "batch": 32,
+      "compute": {
+        "p50_ms": 0.3439,
+        "p95_ms": 0.4398,
+        "texts_per_s": 93044
+      },
+      "end_to_end": {
+        "p50_ms": 0.3244,
+        "p95_ms": 0.384,
+        "texts_per_s": 98654
+      }
+    },
+    {
+      "device": "cuda",
+      "batch": 256,
+      "compute": {
+        "p50_ms": 0.4776,
+        "p95_ms": 0.4955,
+        "texts_per_s": 535988
+      },
+      "end_to_end": {
+        "p50_ms": 0.5565,
+        "p95_ms": 0.5853,
+        "texts_per_s": 459982
+      }
+    },
+    {
+      "device": "cuda",
+      "batch": 1024,
+      "compute": {
+        "p50_ms": 0.9788,
+        "p95_ms": 0.9957,
+        "texts_per_s": 1046151
+      },
+      "end_to_end": {
+        "p50_ms": 1.063,
+        "p95_ms": 1.097,
+        "texts_per_s": 963280
+      }
+    },
+    {
+      "device": "cuda",
+      "batch": 4096,
+      "compute": {
+        "p50_ms": 3.2173,
+        "p95_ms": 3.5479,
+        "texts_per_s": 1273133
+      },
+      "end_to_end": {
+        "p50_ms": 3.3118,
+        "p95_ms": 3.3718,
+        "texts_per_s": 1236802
+      }
+    },
+    {
+      "device": "cuda-fp16",
+      "batch": 1,
+      "compute": {
+        "p50_ms": 0.2058,
+        "p95_ms": 0.2378,
+        "texts_per_s": 4858
+      },
+      "end_to_end": {
+        "p50_ms": 0.3012,
+        "p95_ms": 0.3497,
+        "texts_per_s": 3320
+      }
+    },
+    {
+      "device": "cuda-fp16",
+      "batch": 32,
+      "compute": {
+        "p50_ms": 0.2108,
+        "p95_ms": 0.2712,
+        "texts_per_s": 151823
+      },
+      "end_to_end": {
+        "p50_ms": 0.3381,
+        "p95_ms": 0.4189,
+        "texts_per_s": 94634
+      }
+    },
+    {
+      "device": "cuda-fp16",
+      "batch": 256,
+      "compute": {
+        "p50_ms": 0.2127,
+        "p95_ms": 0.2453,
+        "texts_per_s": 1203853
+      },
+      "end_to_end": {
+        "p50_ms": 0.3211,
+        "p95_ms": 0.5711,
+        "texts_per_s": 797267
+      }
+    },
+    {
+      "device": "cuda-fp16",
+      "batch": 1024,
+      "compute": {
+        "p50_ms": 0.2332,
+        "p95_ms": 0.2979,
+        "texts_per_s": 4391881
+      },
+      "end_to_end": {
+        "p50_ms": 0.3436,
+        "p95_ms": 0.4273,
+        "texts_per_s": 2980539
+      }
+    },
+    {
+      "device": "cuda-fp16",
+      "batch": 4096,
+      "compute": {
+        "p50_ms": 1.0004,
+        "p95_ms": 1.0381,
+        "texts_per_s": 4094551
+      },
+      "end_to_end": {
+        "p50_ms": 1.0722,
+        "p95_ms": 1.1743,
+        "texts_per_s": 3820245
+      }
+    }
+  ]
+}

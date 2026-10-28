@@ -5,7 +5,7 @@ There are three separate pieces here, which are easy to confuse:
 | Piece | Where it runs | What it proves | Status |
 |---|---|---|---|
 | PyTorch classifier + CUDA-aware benchmark (`gpu/`) | Any machine | The code places the model and data on a device correctly and times it correctly | Done; tested on CPU |
-| Real GPU numbers | Google Colab (T4) | Measured CPU-versus-GPU latency and throughput | **Pending: run [colab_benchmark.ipynb](../gpu/colab_benchmark.ipynb)** |
+| Real GPU numbers | Google Colab (Tesla T4) | Measured CPU-versus-GPU latency and throughput | Done 2026-10-28 ([results](#gpu-results-tesla-t4-google-colab)) |
 | Kubernetes GPU Job (`deployments/k8s/gpu/`) | A cluster with NVIDIA nodes | How a GPU workload is requested and scheduled | Manifest written; scheduling demonstrated on kind with a **mocked** GPU |
 
 ## Why there is no CUDA locally
@@ -31,8 +31,6 @@ The development machine is an Intel MacBook Pro (i9-9880H, Intel/AMD graphics). 
 - Optional FP16 run on CUDA (`--fp16`).
 - `--require-cuda` exits with an error rather than producing CPU numbers labelled as GPU. The JSON output records the GPU name, CUDA runtime, cuDNN and torch versions.
 
-**Expected pattern** (to be confirmed by the Colab run): at batch 1 the GPU is likely *slower* end to end, because the transfer and launch overhead outweigh a tiny amount of compute. The GPU should win at large batches. For a real service, that means GPUs pay off only with request batching.
-
 ### CPU results (Intel i9-9880H, torch 2.2.2, 16 threads)
 
 | device | batch | compute p50 ms | compute texts/s | end-to-end p50 ms | end-to-end texts/s |
@@ -45,13 +43,38 @@ The development machine is an Intel MacBook Pro (i9-9880H, Intel/AMD graphics). 
 
 Raw data: [gpu/results/cpu-i9-9880H.json](../gpu/results/cpu-i9-9880H.json). This was a single run of 50 iterations per batch on a laptop, so treat small differences as noise. For example, end-to-end beating compute at batch 256 is noise, not a real effect.
 
-### GPU results
+### GPU results: Tesla T4, Google Colab
 
-**Not measured yet.** To produce them:
-1. Open [gpu/colab_benchmark.ipynb](../gpu/colab_benchmark.ipynb) in Google Colab (*File → Upload notebook*).
-2. *Runtime → Change runtime type → T4 GPU*, then *Run all*.
-3. If the repository is not public, the notebook asks for `dist/gpu-bench.zip` (build it with `make gpu-zip`).
-4. Commit the downloaded `colab-gpu.json` to `gpu/results/`.
+**Measured:** 2026-10-28, Tesla T4 (15.6 GB), CUDA runtime 13.0, cuDNN 9.27, torch 2.11.0+cu130, Python 3.13. Settings: 20 warmup + 100 timed iterations per batch size. The model was trained on the GPU for 8 epochs in 2.9 s, reaching held-out **accuracy 0.931, macro F1 0.931**. Raw data: [gpu/results/colab-t4.json](../gpu/results/colab-t4.json).
+
+End-to-end p50 latency and throughput (including host↔device copies), all measured in the same Colab session:
+
+| batch | Colab CPU (1 thread) | T4 FP32 | T4 FP16 | FP32 speedup | FP16 speedup |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 0.478 ms · 2,090/s | 0.344 ms · 2,903/s | 0.301 ms · 3,320/s | 1.4× | 1.6× |
+| 32 | 1.878 ms · 17,038/s | 0.324 ms · 98,654/s | 0.338 ms · 94,634/s | 5.8× | 5.6× |
+| 256 | 8.007 ms · 31,971/s | 0.556 ms · 459,982/s | 0.321 ms · 797,267/s | 14.4× | 24.9× |
+| 1024 | 31.709 ms · 32,294/s | 1.063 ms · 963,280/s | 0.344 ms · 2,980,539/s | 29.8× | 92.3× |
+| 4096 | 129.774 ms · 31,562/s | 3.312 ms · 1,236,802/s | 1.072 ms · 3,820,245/s | 39.2× | 121.0× |
+
+**How to read this:**
+
+- **The Colab CPU baseline is weak.** The VM has 2 vCPUs and PyTorch used **1 thread**, so the 39–121× speedups overstate what a GPU buys over a real server CPU. Compared with the 16-thread laptop CPU above (a different machine and torch version, so only a rough comparison):
+  - At **batch 1**, the laptop CPU is **about 2× faster** than the T4 (0.170 ms against 0.344 ms). Copying the data and launching the GPU work cost more than the tiny model's compute.
+  - At **batch 4096**, the T4 is about **14× faster** in FP32 (45.9 ms against 3.3 ms) and **about 43× faster** in FP16.
+- **GPU latency barely moves as batches grow**, up to batch 32 in FP32 and up to batch 1024 in FP16. Until then the GPU is mostly idle and dominated by fixed overhead; it is not yet limited by compute. So throughput grows almost linearly with batch size.
+- **FP16** helps from batch 256 upward, where the T4's tensor cores take over. Below that it makes no difference, because overhead dominates.
+- **Host↔device copies** add about 0.08–0.16 ms. That matters at small batches (batch 1: 0.18 → 0.34 ms in FP32) but is noise at large ones.
+
+**What this means for a real service:** sending one request per GPU call wastes the GPU. A GPU inference server should use **dynamic batching**, collecting requests for a few milliseconds and running them as one batch. That trades a little latency for one to two orders of magnitude more throughput. For a small model at low traffic, a multi-core CPU is simpler and has lower latency.
+
+**Limitations:**
+- Each configuration was a single run in a shared cloud VM, with no repeated trials or confidence intervals.
+- The CPU and GPU comparisons on different machines also mix torch versions (2.2.2 against 2.11).
+- FP16 predictions were timed but not checked for accuracy against FP32.
+- Only the model call is timed. The HTTP serving path was not run on the GPU.
+
+**To reproduce:** open [gpu/colab_benchmark.ipynb](../gpu/colab_benchmark.ipynb) in Google Colab (*File → Upload notebook*), choose *Runtime → Change runtime type → T4 GPU*, then *Run all*. If the repository is not cloneable, upload `dist/gpu-bench.zip` (`make gpu-zip`) when the notebook asks.
 
 ## Kubernetes GPU Job (`deployments/k8s/gpu/benchmark-job.yaml`)
 

@@ -21,6 +21,7 @@ More detail: [architecture](docs/architecture.md) · [GPU](docs/gpu.md) · [desi
 | Accuracy / macro F1 | **0.954 / 0.954** ([full metrics + confusion matrix](docs/metrics.json)) |
 | Model latency (CPU, batch 1) | 0.56 ms p50 |
 | End-to-end latency via API (concurrency 1) | 3.7 ms p50, 251 req/s |
+| GPU: PyTorch model on Tesla T4 (Colab) | batch 4096: 3.3 ms FP32 / 1.1 ms FP16, about 14× / 43× faster than a 16-thread laptop CPU; batch 1: the CPU is about 2× faster ([details](docs/gpu.md#gpu-results-tesla-t4-google-colab)) |
 | Tests | 13 Go test cases + 17 pytest cases (one CUDA-only, skipped without a GPU) + an end-to-end script run on kind in CI |
 
 > **The data is synthetic.** The tickets are generated from templates, with cross-class distractor phrases and 5% deliberately flipped labels (see [decisions](docs/decisions.md#3-synthetic-data-explicitly-labelled-as-such)). About 95% is roughly the best any model can score on this data, so these numbers show the pipeline works. They do not predict accuracy on real tickets.
@@ -132,13 +133,13 @@ The inference service also exposes `GET /metadata`, which returns the training m
 
 ### GPU
 
-[`gpu/`](gpu) contains a PyTorch version of the classifier and a CUDA-aware benchmark. It covers warmup, `torch.cuda.synchronize()`, compute versus end-to-end timing including host↔device copies, and FP16. It also has a Kubernetes GPU Job (`nvidia.com/gpu` limits, tolerations) and a scheduling demo on kind with a **mocked** GPU. It has been tested on CPU only; **real GPU numbers are pending** a run of the [Colab notebook](gpu/colab_benchmark.ipynb). Details: [docs/gpu.md](docs/gpu.md).
+[`gpu/`](gpu) contains a PyTorch version of the classifier and a CUDA-aware benchmark. It covers warmup, `torch.cuda.synchronize()`, compute versus end-to-end timing including host↔device copies, and FP16. It also has a Kubernetes GPU Job (`nvidia.com/gpu` limits, tolerations) and a scheduling demo on kind with a **mocked** GPU. It was benchmarked on a real **Tesla T4** in Google Colab with the [notebook](gpu/colab_benchmark.ipynb). The GPU wins only with batching: at batch 1 a multi-core CPU has lower latency. Details: [docs/gpu.md](docs/gpu.md).
 
 ## Limitations and next steps
 
 - The data is synthetic; the next step is real labelled tickets and a confidence-calibration check.
 - The model is trained at image build time; in production it would be a versioned artifact.
 - There is no Ingress, TLS, autoscaling or metrics endpoint yet.
-- GPU benchmark numbers have not been measured yet; the code and Colab notebook are ready (see [docs/gpu.md](docs/gpu.md)).
+- The GPU was benchmarked on hosted Colab only. The GPU Kubernetes Job has not run on a real GPU node (scheduling was demonstrated with a mocked GPU), and the HTTP service still serves the CPU model.
 
 See [docs/decisions.md](docs/decisions.md#what-i-would-change-before-production) for the full list.
