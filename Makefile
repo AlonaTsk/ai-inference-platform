@@ -62,7 +62,10 @@ bench: train
 # --- GPU (PyTorch) ---------------------------------------------------------
 GPU_PY ?= .venv-gpu/bin/python
 
-.PHONY: gpu-test gpu-bench gpu-image gpu-zip gpu-mock-demo
+.PHONY: venv-gpu gpu-test gpu-bench gpu-image gpu-zip gpu-mock-demo
+
+venv-gpu:
+	python3 -m venv .venv-gpu && .venv-gpu/bin/pip install -r gpu/requirements.txt
 
 gpu-test:
 	$(GPU_PY) -m pytest gpu -q

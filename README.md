@@ -20,8 +20,8 @@ More detail: [architecture](docs/architecture.md) · [GPU](docs/gpu.md) · [desi
 | Held-out test set | 800 tickets (20%, stratified, split before fitting) |
 | Accuracy / macro F1 | **0.954 / 0.954** ([full metrics + confusion matrix](docs/metrics.json)) |
 | Model latency (CPU, batch 1) | 0.56 ms p50 |
-| End-to-end latency via API (concurrency 1) | 3.7 ms p50, 251 req/s |
-| GPU: PyTorch model on Tesla T4 (Colab) | batch 4096: 3.3 ms FP32 / 1.1 ms FP16, about 14× / 43× faster than a 16-thread laptop CPU; batch 1: the CPU is about 2× faster ([details](docs/gpu.md#gpu-results-tesla-t4-google-colab)) |
+| End-to-end latency via API (concurrency 1, Docker Compose on a laptop) | 3.7 ms p50, 251 req/s |
+| GPU: PyTorch model on Tesla T4 (Colab) | batch 4096: 3.3 ms FP32 / 1.1 ms FP16, roughly 14× / 43× faster than a 16-thread laptop CPU (different machines); batch 1: the CPU is about 2× faster ([details](docs/gpu.md#gpu-results-tesla-t4-google-colab)) |
 | Tests | 15 Go test cases + 18 pytest cases (one CUDA-only, skipped without a GPU) + an end-to-end script run on kind in CI |
 
 > **The data is synthetic.** The tickets are generated from templates, with cross-class distractor phrases and 5% deliberately flipped labels (see [decisions](docs/decisions.md#3-synthetic-data-explicitly-labelled-as-such)). About 95% is roughly the best any model can score on this data, so these numbers show the pipeline works. They do not predict accuracy on real tickets.
@@ -36,8 +36,11 @@ deployments/k8s/      Namespace, ConfigMap, Deployments, Services (Kustomize) + 
 benchmarks/           CPU benchmark scripts and recorded results
 gpu/                  PyTorch model, CUDA-aware CPU/GPU benchmark, Colab notebook
 tests/e2e.sh          End-to-end smoke test against a running stack
-.github/workflows/    CI: Go tests, Python tests + training, kind deploy + e2e
-docs/                 Architecture, decisions, troubleshooting, metrics
+.github/workflows/    CI: lint, Go tests, Python tests + training, PyTorch tests on CPU, kind deploy + e2e
+docs/                 Architecture, decisions, troubleshooting, GPU, metrics
+docker-compose.yml    Local two-service stack
+Makefile              All commands below
+pyproject.toml        ruff, mypy and pytest configuration
 ```
 
 ## Prerequisites
@@ -63,7 +66,7 @@ make e2e           # end-to-end smoke test
 make down
 ```
 
-Is port 8080 busy? Use `make up API_PORT=18081` and `make e2e API_PORT=18081`.
+Is port 8080 busy? Pass another port to any target, e.g. `make up API_PORT=18081` and `make e2e API_PORT=18081` (also works for `make kind-e2e`).
 
 ### 3. Kubernetes (kind)
 
@@ -131,11 +134,19 @@ The inference service also exposes `GET /metadata`, which returns the training m
 
 ## Benchmarks
 
-`make bench` runs both CPU benchmarks. The recorded results, hardware and limitations are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md). In short, the model takes about 0.6 ms per ticket. Throughput levels off at about 400 req/s because of the single Python HTTP worker, not the model.
+With the Compose stack running (`make up`), `make bench` runs both CPU benchmarks. The recorded results, hardware and limitations are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md). In short, the model takes about 0.6 ms per ticket. Throughput levels off at about 400 req/s because of the single Python HTTP worker, not the model.
 
 ### GPU
 
 [`gpu/`](gpu) contains a PyTorch version of the classifier and a CUDA-aware benchmark. It covers warmup, `torch.cuda.synchronize()`, compute versus end-to-end timing including host↔device copies, and FP16. It also has a Kubernetes GPU Job (`nvidia.com/gpu` limits, tolerations) and a scheduling demo on kind with a **mocked** GPU. It was benchmarked on a real **Tesla T4** in Google Colab with the [notebook](gpu/colab_benchmark.ipynb). The GPU wins only with batching: at batch 1 a multi-core CPU has lower latency. Details: [docs/gpu.md](docs/gpu.md).
+
+```bash
+make venv-gpu       # separate .venv-gpu with PyTorch (Intel Macs get torch 2.2.2, the last x86 macOS build)
+make gpu-test       # PyTorch tests; the CUDA test is skipped without an NVIDIA GPU
+make gpu-bench      # CPU benchmark here, CPU + GPU where CUDA is available
+make gpu-zip        # dist/gpu-bench.zip to upload to Colab if the repo cannot be cloned
+make gpu-mock-demo  # on the kind cluster: GPU Job Pending -> fake GPU advertised -> scheduled -> fails without CUDA
+```
 
 ## Limitations and next steps
 
