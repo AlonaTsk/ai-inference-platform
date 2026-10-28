@@ -25,10 +25,12 @@ SEED = 42
 
 
 def build_pipeline() -> Pipeline:
-    return Pipeline([
-        ("tfidf", TfidfVectorizer(ngram_range=(1, 2), min_df=2, sublinear_tf=True)),
-        ("clf", LogisticRegression(max_iter=1000, C=2.0, random_state=SEED)),
-    ])
+    return Pipeline(
+        [
+            ("tfidf", TfidfVectorizer(ngram_range=(1, 2), min_df=2, sublinear_tf=True)),
+            ("clf", LogisticRegression(max_iter=1000, C=2.0, random_state=SEED)),
+        ]
+    )
 
 
 def main() -> None:
@@ -39,7 +41,8 @@ def main() -> None:
 
     texts, labels = generate(n=args.samples, seed=SEED)
     x_train, x_test, y_train, y_test = train_test_split(
-        texts, labels, test_size=0.2, stratify=labels, random_state=SEED)
+        texts, labels, test_size=0.2, stratify=labels, random_state=SEED
+    )
 
     model = build_pipeline()
     model.fit(x_train, y_train)
@@ -54,11 +57,13 @@ def main() -> None:
         "accuracy": round(accuracy_score(y_test, pred), 4),
         "macro_f1": round(report["macro avg"]["f1-score"], 4),
         "per_class": {
-            l: {k: round(report[l][k], 4) for k in ("precision", "recall", "f1-score", "support")}
-            for l in LABELS
+            label: {k: round(report[label][k], 4) for k in ("precision", "recall", "f1-score", "support")}
+            for label in LABELS
         },
-        "confusion_matrix": {"labels": LABELS,
-                             "rows_true_cols_pred": confusion_matrix(y_test, pred, labels=LABELS).tolist()},
+        "confusion_matrix": {
+            "labels": LABELS,
+            "rows_true_cols_pred": confusion_matrix(y_test, pred, labels=LABELS).tolist(),
+        },
         "versions": {"python": platform.python_version(), "scikit-learn": sklearn.__version__},
     }
 

@@ -18,29 +18,45 @@ import (
 )
 
 const (
-	MaxTextLen   = 2000
-	maxBodyBytes = 16 << 10
+	// MaxTextLen is the maximum ticket length in characters (runes).
+	MaxTextLen = 2000
+
+	maxBodyBytes     = 16 << 10
+	maxUpstreamBytes = 64 << 10
+	readyzTimeout    = 2 * time.Second
 )
 
+// Config holds the settings for talking to the inference service.
 type Config struct {
+	// InferenceURL is the base URL of the inference service, without a trailing slash.
 	InferenceURL string
-	Timeout      time.Duration
+	// Timeout bounds each upstream request, including reading the response.
+	Timeout time.Duration
 }
 
+// Server serves the prediction API. Create it with New.
 type Server struct {
 	cfg    Config
 	client *http.Client
 	log    *slog.Logger
 }
 
+// New returns a Server that forwards predictions to cfg.InferenceURL.
 func New(cfg Config, log *slog.Logger) *Server {
+	// The default transport keeps only 2 idle connections per host, which
+	// forces new upstream connections under concurrent load.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = 100
+	transport.MaxIdleConnsPerHost = 100
+
 	return &Server{
 		cfg:    cfg,
-		client: &http.Client{Timeout: cfg.Timeout},
+		client: &http.Client{Timeout: cfg.Timeout, Transport: transport},
 		log:    log,
 	}
 }
 
+// Routes returns the HTTP handler with all endpoints and request logging.
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
@@ -49,10 +65,12 @@ func (s *Server) Routes() http.Handler {
 	return s.logRequests(mux)
 }
 
+// PredictRequest is the body of POST /v1/predict.
 type PredictRequest struct {
 	Text string `json:"text"`
 }
 
+// PredictResponse is the successful response of POST /v1/predict.
 type PredictResponse struct {
 	Label        string             `json:"label"`
 	Confidence   float64            `json:"confidence"`
@@ -60,6 +78,7 @@ type PredictResponse struct {
 	ModelVersion string             `json:"model_version,omitempty"`
 }
 
+// ErrorResponse is the body of every non-2xx response.
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
@@ -84,15 +103,23 @@ func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
 // readyz reports ready only when the inference service is ready, so a
 // Kubernetes Service never routes traffic to an API pod that cannot answer.
 func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), readyzTimeout)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, s.cfg.InferenceURL+"/readyz", nil)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.cfg.InferenceURL+"/readyz", nil)
+	if err != nil {
+		s.log.Error("build readyz request", "err", err)
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{"invalid inference URL"})
+		return
+	}
 	resp, err := s.client.Do(req)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{"inference unreachable"})
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxUpstreamBytes)) // allow connection reuse
+
 	if resp.StatusCode != http.StatusOK {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{"inference not ready"})
 		return
@@ -101,25 +128,47 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) predict(w http.ResponseWriter, r *http.Request) {
-	var in PredictRequest
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{"body must be JSON: {\"text\": \"...\"}"})
-		return
-	}
-	if err := validate(in.Text); err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{err.Error()})
+	in, status, err := decodePredictRequest(w, r)
+	if err != nil {
+		writeJSON(w, status, ErrorResponse{err.Error()})
 		return
 	}
 
 	out, status, err := s.callInference(r.Context(), in.Text)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			// The client went away; nobody is waiting for an answer.
+			s.log.Info("client canceled request")
+			return
+		}
 		s.log.Error("inference call failed", "err", err, "status", status)
 		writeJSON(w, status, ErrorResponse{http.StatusText(status)})
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// decodePredictRequest parses and validates the body, returning the HTTP
+// status to use when it is rejected.
+func decodePredictRequest(w http.ResponseWriter, r *http.Request) (PredictRequest, int, error) {
+	var in PredictRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(&in); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			return in, http.StatusRequestEntityTooLarge, fmt.Errorf("body must be at most %d bytes", maxBodyBytes)
+		}
+		return in, http.StatusBadRequest, errors.New(`body must be JSON: {"text": "..."}`)
+	}
+	if dec.More() {
+		return in, http.StatusBadRequest, errors.New("body must contain a single JSON object")
+	}
+	if err := validate(in.Text); err != nil {
+		return in, http.StatusBadRequest, err
+	}
+	return in, 0, nil
 }
 
 func validate(text string) error {
@@ -137,10 +186,13 @@ func validate(text string) error {
 // callInference returns the HTTP status to send the client on failure:
 // 504 when the upstream timed out, 502 for any other upstream problem.
 func (s *Server) callInference(ctx context.Context, text string) (*PredictResponse, int, error) {
-	body, _ := json.Marshal(upstreamRequest{Texts: []string{text}})
+	body, err := json.Marshal(upstreamRequest{Texts: []string{text}})
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("encode upstream request: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.InferenceURL+"/predict", bytes.NewReader(body))
 	if err != nil {
-		return nil, http.StatusInternalServerError, err
+		return nil, http.StatusInternalServerError, fmt.Errorf("build upstream request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -152,14 +204,15 @@ func (s *Server) callInference(ctx context.Context, text string) (*PredictRespon
 		return nil, http.StatusBadGateway, err
 	}
 	defer resp.Body.Close()
+	limited := io.LimitReader(resp.Body, maxUpstreamBytes)
 
 	if resp.StatusCode != http.StatusOK {
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		snippet, _ := io.ReadAll(io.LimitReader(limited, 512))
 		return nil, http.StatusBadGateway, fmt.Errorf("upstream status %d: %s", resp.StatusCode, snippet)
 	}
 	var up upstreamResponse
-	if err := json.NewDecoder(resp.Body).Decode(&up); err != nil {
-		return nil, http.StatusBadGateway, fmt.Errorf("decode upstream: %w", err)
+	if err := json.NewDecoder(limited).Decode(&up); err != nil {
+		return nil, http.StatusBadGateway, fmt.Errorf("decode upstream response: %w", err)
 	}
 	if len(up.Predictions) != 1 {
 		return nil, http.StatusBadGateway, fmt.Errorf("expected 1 prediction, got %d", len(up.Predictions))
@@ -176,7 +229,7 @@ func isTimeout(err error) bool {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v) // the status is already sent; nothing useful to do on error
 }
 
 type statusRecorder struct {
@@ -187,6 +240,11 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
+}
+
+// Unwrap lets http.ResponseController reach the underlying writer.
+func (r *statusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
 }
 
 func (s *Server) logRequests(next http.Handler) http.Handler {

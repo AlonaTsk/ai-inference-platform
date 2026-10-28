@@ -10,6 +10,7 @@ import argparse
 import json
 import statistics
 import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
@@ -29,7 +30,7 @@ def call(url: str, i: int) -> tuple[float, bool]:
         with urllib.request.urlopen(req, timeout=10) as resp:
             resp.read()
             ok = resp.status == 200
-    except Exception:
+    except (urllib.error.URLError, TimeoutError, ConnectionError):
         ok = False
     return (time.perf_counter() - t0) * 1000, ok
 
@@ -50,12 +51,15 @@ def main() -> None:
         results = list(pool.map(lambda i: call(args.url, i), range(args.n)))
     wall = time.perf_counter() - t0
 
-    lat = sorted(r[0] for r in results)
+    lat = [r[0] for r in results]
     errors = sum(1 for r in results if not r[1])
-    print(f"| concurrency | requests | errors | p50 ms | p95 ms | p99 ms | throughput (req/s) |")
-    print(f"|---:|---:|---:|---:|---:|---:|---:|")
-    print(f"| {args.c} | {args.n} | {errors} | {statistics.median(lat):.1f} | "
-          f"{lat[int(0.95 * len(lat)) - 1]:.1f} | {lat[int(0.99 * len(lat)) - 1]:.1f} | {args.n / wall:,.0f} |")
+    pct = statistics.quantiles(lat, n=100)  # pct[k - 1] is the k-th percentile
+    print("| concurrency | requests | errors | p50 ms | p95 ms | p99 ms | throughput (req/s) |")
+    print("|---:|---:|---:|---:|---:|---:|---:|")
+    print(
+        f"| {args.c} | {args.n} | {errors} | {statistics.median(lat):.1f} | "
+        f"{pct[94]:.1f} | {pct[98]:.1f} | {args.n / wall:,.0f} |"
+    )
 
 
 if __name__ == "__main__":

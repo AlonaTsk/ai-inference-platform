@@ -3,22 +3,19 @@
 Measures latency and throughput of model.predict_proba for several batch
 sizes, after warmup, and prints a Markdown table plus the hardware used.
 
-Usage (from repo root):
-  python benchmarks/model_bench.py --model inference/model/model.joblib
+Usage (from repo root, with inference/ on the import path):
+  PYTHONPATH=inference python benchmarks/model_bench.py --model inference/model/model.joblib
 """
 
 import argparse
 import os
 import platform
 import statistics
-import sys
 import time
-from pathlib import Path
 
 import joblib
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "inference"))
-from app.data import generate  # noqa: E402
+from app.data import generate
 
 
 def main() -> None:
@@ -33,8 +30,8 @@ def main() -> None:
     # Different seed from training so the texts are fresh samples.
     texts, _ = generate(n=2048, seed=999)
 
-    print(f"python {platform.python_version()} | {platform.machine()} | {platform.processor() or platform.platform()} | "
-          f"{os.cpu_count()} logical CPUs | single process\n")
+    cpu = platform.processor() or platform.platform()
+    print(f"python {platform.python_version()} | {platform.machine()} | {cpu} | {os.cpu_count()} logical CPUs\n")
     print("| batch | p50 ms | p95 ms | throughput (texts/s) |")
     print("|------:|-------:|-------:|---------------------:|")
     for bs in (int(b) for b in args.batches.split(",")):
@@ -46,9 +43,8 @@ def main() -> None:
             t0 = time.perf_counter()
             model.predict_proba(batch)
             times.append((time.perf_counter() - t0) * 1000)
-        times.sort()
         p50 = statistics.median(times)
-        p95 = times[int(0.95 * len(times)) - 1]
+        p95 = statistics.quantiles(times, n=20)[18]
         print(f"| {bs} | {p50:.3f} | {p95:.3f} | {bs / (p50 / 1000):,.0f} |")
 
 

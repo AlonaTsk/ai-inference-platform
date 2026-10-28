@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir "torch==${TORCH_VERSION}" numpy --index-url "${TO
 WORKDIR /srv
 COPY inference/app/__init__.py inference/app/data.py inference/app/
 COPY gpu/textclf.py gpu/benchmark.py gpu/
+ENV PYTHONPATH=/srv/inference
 
 RUN useradd --uid 10001 --no-create-home app
 USER 10001

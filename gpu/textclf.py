@@ -7,15 +7,13 @@ Device placement is explicit: nothing silently claims to be on a GPU.
 
 import random
 import re
-import sys
 from collections import Counter
-from pathlib import Path
+from itertools import pairwise
 
 import torch
 from torch import nn
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "inference"))
-from app.data import LABELS, generate  # noqa: E402
+from app.data import LABELS, generate  # from inference/; put it on PYTHONPATH (see pyproject.toml)
 
 TOKEN_RE = re.compile(r"[a-z0-9']+")
 PAD, UNK = 0, 1
@@ -32,13 +30,13 @@ def pick_device(requested: str = "auto") -> torch.device:
 def tokenize(text: str) -> list[str]:
     tokens = TOKEN_RE.findall(text.lower())
     # Unigrams + bigrams, mirroring the TF-IDF baseline's ngram_range=(1, 2).
-    return tokens + [f"{a}_{b}" for a, b in zip(tokens, tokens[1:])]
+    return [*tokens, *(f"{a}_{b}" for a, b in pairwise(tokens))]
 
 
 class Vocab:
     def __init__(self, texts: list[str], min_freq: int = 2):
         counts = Counter(t for text in texts for t in tokenize(text))
-        self.itos = ["<pad>", "<unk>"] + sorted(t for t, c in counts.items() if c >= min_freq)
+        self.itos = ["<pad>", "<unk>", *sorted(t for t, c in counts.items() if c >= min_freq)]
         self.stoi = {t: i for i, t in enumerate(self.itos)}
 
     def __len__(self) -> int:
@@ -46,7 +44,8 @@ class Vocab:
 
     def encode_batch(self, texts: list[str]) -> tuple[torch.Tensor, torch.Tensor]:
         """Flat token ids + offsets, the input format nn.EmbeddingBag expects."""
-        ids, offsets = [], []
+        ids: list[int] = []
+        offsets: list[int] = []
         for text in texts:
             offsets.append(len(ids))
             ids.extend(self.stoi.get(t, UNK) for t in tokenize(text) or ["<unk>"])
@@ -58,8 +57,12 @@ class TicketClassifier(nn.Module):
         super().__init__()
         self.embed = nn.EmbeddingBag(vocab_size, embed_dim, mode="mean", padding_idx=PAD)
         self.mlp = nn.Sequential(
-            nn.Linear(embed_dim, hidden), nn.ReLU(), nn.Dropout(0.2),
-            nn.Linear(hidden, hidden), nn.ReLU(), nn.Dropout(0.2),
+            nn.Linear(embed_dim, hidden),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(hidden, hidden),
+            nn.ReLU(),
+            nn.Dropout(0.2),
             nn.Linear(hidden, n_classes),
         )
 
@@ -67,17 +70,25 @@ class TicketClassifier(nn.Module):
         return self.mlp(self.embed(ids, offsets))
 
 
-def split(n: int = 4000, seed: int = 42, test_frac: float = 0.2):
+Split = tuple[list[str], list[int]]
+
+
+def split(n: int = 4000, seed: int = 42, test_frac: float = 0.2) -> tuple[Split, Split]:
     """Shuffled split before building the vocabulary, so test tokens never leak into it."""
     texts, labels = generate(n=n, seed=seed)
     idx = list(range(n))
     random.Random(seed).shuffle(idx)
     cut = int(n * (1 - test_frac))
-    pick = lambda ids: ([texts[i] for i in ids], [LABELS.index(labels[i]) for i in ids])  # noqa: E731
+
+    def pick(ids: list[int]) -> Split:
+        return [texts[i] for i in ids], [LABELS.index(labels[i]) for i in ids]
+
     return pick(idx[:cut]), pick(idx[cut:])
 
 
-def train(device: torch.device, epochs: int = 8, batch_size: int = 64, seed: int = 42):
+def train(
+    device: torch.device, epochs: int = 8, batch_size: int = 64, seed: int = 42
+) -> tuple[TicketClassifier, Vocab, dict]:
     torch.manual_seed(seed)
     (x_train, y_train), (x_test, y_test) = split(seed=seed)
     vocab = Vocab(x_train)
@@ -91,7 +102,7 @@ def train(device: torch.device, epochs: int = 8, batch_size: int = 64, seed: int
         model.train()
         rng.shuffle(order)
         for start in range(0, len(order), batch_size):
-            batch = order[start:start + batch_size]
+            batch = order[start : start + batch_size]
             ids, offsets = vocab.encode_batch([x_train[i] for i in batch])
             target = torch.tensor([y_train[i] for i in batch], device=device)
             opt.zero_grad()
@@ -116,5 +127,8 @@ def evaluate(model: nn.Module, vocab: Vocab, texts: list[str], labels: list[int]
         p = tp / (tp + fp) if tp + fp else 0.0
         r = tp / (tp + fn) if tp + fn else 0.0
         f1s.append(2 * p * r / (p + r) if p + r else 0.0)
-    return {"accuracy": round((pred == y).float().mean().item(), 4),
-            "macro_f1": round(sum(f1s) / len(f1s), 4), "n_test": len(labels)}
+    return {
+        "accuracy": round((pred == y).float().mean().item(), 4),
+        "macro_f1": round(sum(f1s) / len(f1s), 4),
+        "n_test": len(labels),
+    }

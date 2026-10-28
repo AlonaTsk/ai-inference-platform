@@ -3,10 +3,17 @@ NS       ?= ai-inference
 API_PORT ?= 8080
 PY       ?= .venv/bin/python
 
-.PHONY: venv test test-go test-py train build up down e2e kind-up kind-deploy kind-e2e kind-down bench
+.PHONY: venv lint test test-go test-py train build up down e2e kind-up kind-deploy kind-e2e kind-down bench
 
 venv:
 	python3 -m venv .venv && .venv/bin/pip install -r inference/requirements-dev.txt
+
+lint:
+	test -z "$$(gofmt -l api)" || (gofmt -l api; exit 1)
+	cd api && go vet ./... && go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+	$(PY) -m ruff check .
+	$(PY) -m ruff format --check .
+	$(PY) -m mypy inference/app inference/tests benchmarks
 
 test: test-go test-py
 
@@ -14,7 +21,7 @@ test-go:
 	cd api && go vet ./... && go test -race ./...
 
 test-py:
-	cd inference && ../$(PY) -m pytest -q
+	$(PY) -m pytest inference/tests -q
 
 train:
 	cd inference && ../$(PY) -m app.train --out model
@@ -49,7 +56,7 @@ kind-down:
 	kind delete cluster --name $(CLUSTER)
 
 bench: train
-	$(PY) benchmarks/model_bench.py --model inference/model/model.joblib
+	PYTHONPATH=inference $(PY) benchmarks/model_bench.py --model inference/model/model.joblib
 	$(PY) benchmarks/http_bench.py --url http://localhost:$(API_PORT) -c 8
 
 # --- GPU (PyTorch) ---------------------------------------------------------
@@ -58,10 +65,10 @@ GPU_PY ?= .venv-gpu/bin/python
 .PHONY: gpu-test gpu-bench gpu-image gpu-zip gpu-mock-demo
 
 gpu-test:
-	cd gpu && ../$(GPU_PY) -m pytest -q -rs
+	$(GPU_PY) -m pytest gpu -q
 
 gpu-bench:
-	cd gpu && ../$(GPU_PY) benchmark.py
+	PYTHONPATH=inference $(GPU_PY) gpu/benchmark.py
 
 gpu-image:
 	docker build -f gpu/Dockerfile -t ai-inference-platform/gpu-bench:cpu .
@@ -69,7 +76,7 @@ gpu-image:
 # Upload bundle for Colab when the repo is not cloneable.
 gpu-zip:
 	mkdir -p dist && rm -f dist/gpu-bench.zip
-	zip -q dist/gpu-bench.zip gpu/textclf.py gpu/benchmark.py gpu/test_textclf.py \
+	zip -q dist/gpu-bench.zip pyproject.toml gpu/textclf.py gpu/benchmark.py gpu/test_textclf.py \
 		inference/app/__init__.py inference/app/data.py
 	@echo "wrote dist/gpu-bench.zip"
 

@@ -23,7 +23,7 @@ flowchart LR
 ## Request flow
 
 1. The client sends `POST /v1/predict` with `{"text": "..."}` to the **api** Service.
-2. The Go API validates the body. It must be JSON with no unknown fields, at most 16 KiB, and the text must be non-blank UTF-8 of at most 2000 characters. Invalid input returns `400` without calling the inference service.
+2. The Go API validates the body. It must be JSON with no unknown fields, at most 16 KiB, and the text must be non-blank UTF-8 of at most 2000 characters. Invalid input returns `400`, and a body over 16 KiB returns `413`, without calling the inference service.
 3. The API forwards `{"texts": [text]}` to `http://inference:8000/predict`, the cluster DNS name of the inference Service, with a 3 s timeout.
 4. The inference service runs `predict_proba` and returns a label, its confidence and the score for every class.
 5. The API maps the response to its public shape, or converts upstream failures into stable errors:
@@ -31,6 +31,7 @@ flowchart LR
 | Situation | Status |
 |---|---|
 | Invalid input | 400 |
+| Body larger than 16 KiB | 413 |
 | Inference returned non-200, malformed JSON or the wrong number of predictions | 502 |
 | Inference unreachable (connection refused, DNS) | 502 |
 | Inference slower than `INFERENCE_TIMEOUT` | 504 |

@@ -78,6 +78,30 @@ Bind for 0.0.0.0:8080 failed: port is already allocated
 
 Another local project already published port 8080. The Compose file now reads the host port from `API_PORT` (default 8080): `API_PORT=18081 docker compose up -d`.
 
+## Incident 4: latency regression from a sync FastAPI dependency
+
+**Symptom:** after a refactor that moved the loaded model from a module-level dict into `app.state`, read through a FastAPI dependency (`Depends(loaded_model)`), the end-to-end benchmark looked slower. The laptop was heavily loaded at the time (load average about 11), so a before/after comparison of single runs was meaningless.
+
+**Measuring it properly:**
+- The previous commit was checked out with `git worktree`, built and run as a second Compose project next to the new one.
+- Each inference service was benchmarked **directly from inside its own container**, removing the Go API and Docker networking from the measurement.
+- 6 alternating rounds of 1000 requests each, so both versions saw the same machine load.
+
+| version | p50 per round (ms) | median |
+|---|---|---:|
+| before refactor | 3.76 3.79 4.07 4.31 4.59 4.63 | 4.19 |
+| after refactor | 4.05 4.46 4.71 4.91 5.01 5.44 | 4.81 |
+
+**Root cause:** the dependency was declared with plain `def`. FastAPI runs `def` dependencies in its thread pool, the same as `def` endpoints. Every request therefore paid for an extra hand-off to a worker thread and back, just to read an attribute.
+
+**Fix:** `async def loaded_model(...)`. It does no I/O, so it is safe to run on the event loop. After the fix, both versions measured 3.53–3.66 ms per round, apart from one 4.49 ms outlier in the old version: a regression of ≈0.
+
+**Lessons:**
+- In FastAPI, `def` versus `async def` is a scheduling decision. Use `def` for blocking work, such as the CPU-bound `predict` endpoint. Use `async def` for cheap non-blocking code.
+- On a noisy machine, compare versions side by side with interleaved runs, never against a number recorded earlier.
+
+The same comparison showed that raising the Go client's idle-connection pool (the default is 2 per host) improved API throughput by only about 5% at concurrency 8–32, within noise. The single Python worker remains the bottleneck.
+
 ## Diagnostic cheat sheet
 
 ```bash

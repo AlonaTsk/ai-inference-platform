@@ -41,6 +41,7 @@ func do(h http.Handler, method, path, body string) *httptest.ResponseRecorder {
 }
 
 func TestPredictSuccess(t *testing.T) {
+	t.Parallel()
 	h := newTestServer(t, okUpstream(t), time.Second)
 	rec := do(h, http.MethodPost, "/v1/predict", `{"text":"I was charged twice"}`)
 	if rec.Code != http.StatusOK {
@@ -56,6 +57,7 @@ func TestPredictSuccess(t *testing.T) {
 }
 
 func TestPredictValidation(t *testing.T) {
+	t.Parallel()
 	h := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Error("upstream must not be called for invalid input")
 	}, time.Second)
@@ -66,9 +68,11 @@ func TestPredictValidation(t *testing.T) {
 		"missing text":  `{}`,
 		"unknown field": `{"text":"hi","extra":1}`,
 		"too long":      `{"text":"` + strings.Repeat("a", MaxTextLen+1) + `"}`,
+		"two objects":   `{"text":"a"}{"text":"b"}`,
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			if rec := do(h, http.MethodPost, "/v1/predict", body); rec.Code != http.StatusBadRequest {
 				t.Errorf("status = %d, want 400", rec.Code)
 			}
@@ -76,7 +80,19 @@ func TestPredictValidation(t *testing.T) {
 	}
 }
 
+func TestPredictOversizedBodyIs413(t *testing.T) {
+	t.Parallel()
+	h := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("upstream must not be called for an oversized body")
+	}, time.Second)
+	body := `{"text":"` + strings.Repeat("a", maxBodyBytes) + `"}`
+	if rec := do(h, http.MethodPost, "/v1/predict", body); rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("status = %d, want 413", rec.Code)
+	}
+}
+
 func TestPredictUpstreamErrorIs502(t *testing.T) {
+	t.Parallel()
 	h := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}, time.Second)
@@ -86,6 +102,7 @@ func TestPredictUpstreamErrorIs502(t *testing.T) {
 }
 
 func TestPredictMalformedUpstreamIs502(t *testing.T) {
+	t.Parallel()
 	h := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"predictions":[]}`)
 	}, time.Second)
@@ -95,6 +112,7 @@ func TestPredictMalformedUpstreamIs502(t *testing.T) {
 }
 
 func TestPredictUpstreamTimeoutIs504(t *testing.T) {
+	t.Parallel()
 	h := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)
 	}, 50*time.Millisecond)
@@ -104,6 +122,7 @@ func TestPredictUpstreamTimeoutIs504(t *testing.T) {
 }
 
 func TestPredictUpstreamDownIs502(t *testing.T) {
+	t.Parallel()
 	h := New(Config{InferenceURL: "http://127.0.0.1:1", Timeout: time.Second},
 		slog.New(slog.NewTextHandler(io.Discard, nil))).Routes()
 	if rec := do(h, http.MethodPost, "/v1/predict", `{"text":"hi"}`); rec.Code != http.StatusBadGateway {
@@ -112,6 +131,7 @@ func TestPredictUpstreamDownIs502(t *testing.T) {
 }
 
 func TestReadyzFollowsInference(t *testing.T) {
+	t.Parallel()
 	ready := newTestServer(t, okUpstream(t), time.Second)
 	if rec := do(ready, http.MethodGet, "/readyz", ""); rec.Code != http.StatusOK {
 		t.Errorf("ready: status = %d", rec.Code)
@@ -125,6 +145,7 @@ func TestReadyzFollowsInference(t *testing.T) {
 }
 
 func TestHealthzAndMethodRouting(t *testing.T) {
+	t.Parallel()
 	h := newTestServer(t, okUpstream(t), time.Second)
 	if rec := do(h, http.MethodGet, "/healthz", ""); rec.Code != http.StatusOK {
 		t.Errorf("healthz status = %d", rec.Code)

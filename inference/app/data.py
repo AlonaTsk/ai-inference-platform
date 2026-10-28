@@ -13,14 +13,29 @@ import random
 LABELS = ["account", "billing", "shipping", "technical"]
 
 OPENERS = [
-    "Hi,", "Hello team,", "Hey,", "Good morning,", "", "", "Urgent:",
-    "Please help.", "Not sure who to ask, but", "Following up on my last message,",
+    "Hi,",
+    "Hello team,",
+    "Hey,",
+    "Good morning,",
+    "",
+    "",
+    "Urgent:",
+    "Please help.",
+    "Not sure who to ask, but",
+    "Following up on my last message,",
 ]
 
 CLOSERS = [
-    "Thanks.", "Thank you in advance.", "Please advise.", "", "", "",
-    "This is really frustrating.", "Can someone look at this today?",
-    "Order number is in my profile.", "Regards",
+    "Thanks.",
+    "Thank you in advance.",
+    "Please advise.",
+    "",
+    "",
+    "",
+    "This is really frustrating.",
+    "Can someone look at this today?",
+    "Order number is in my profile.",
+    "Regards",
 ]
 
 CORE = {
@@ -75,14 +90,34 @@ CORE = {
 }
 
 DETAILS = {
-    "account": ["since yesterday", "on the web and on mobile", "I already tried incognito mode",
-                "it says my session expired", "my login worked last week"],
-    "billing": ["on my card statement", "for the annual plan", "the amount was 49 euros",
-                "according to my bank", "for last month's invoice"],
-    "shipping": ["the order was placed ten days ago", "the courier is not answering",
-                 "the estimated date has passed", "for order 12345", "it was supposed to be express"],
-    "technical": ["on version 4.2", "I cleared the cache already", "it happens every time",
-                  "the console shows an error", "on Windows and Mac"],
+    "account": [
+        "since yesterday",
+        "on the web and on mobile",
+        "I already tried incognito mode",
+        "it says my session expired",
+        "my login worked last week",
+    ],
+    "billing": [
+        "on my card statement",
+        "for the annual plan",
+        "the amount was 49 euros",
+        "according to my bank",
+        "for last month's invoice",
+    ],
+    "shipping": [
+        "the order was placed ten days ago",
+        "the courier is not answering",
+        "the estimated date has passed",
+        "for order 12345",
+        "it was supposed to be express",
+    ],
+    "technical": [
+        "on version 4.2",
+        "I cleared the cache already",
+        "it happens every time",
+        "the console shows an error",
+        "on Windows and Mac",
+    ],
 }
 
 
@@ -91,20 +126,21 @@ def _ticket(rng: random.Random, label: str, distractor_rate: float) -> str:
     if rng.random() < 0.6:
         parts.append(rng.choice(DETAILS[label]))
     if rng.random() < distractor_rate:
-        other = rng.choice([l for l in LABELS if l != label])
+        other = rng.choice([c for c in LABELS if c != label])
         parts.append("also " + rng.choice(DETAILS[other] + CORE[other][:3]))
     parts.append(rng.choice(CLOSERS))
     return " ".join(p for p in parts if p).strip()
 
 
-def generate(n: int = 4000, seed: int = 42, distractor_rate: float = 0.35,
-             label_noise: float = 0.05) -> tuple[list[str], list[str]]:
+def generate(
+    n: int = 4000, seed: int = 42, distractor_rate: float = 0.35, label_noise: float = 0.05
+) -> tuple[list[str], list[str]]:
     rng = random.Random(seed)
     texts, labels = [], []
     for i in range(n):
         label = LABELS[i % len(LABELS)]
         texts.append(_ticket(rng, label, distractor_rate))
         if rng.random() < label_noise:
-            label = rng.choice([l for l in LABELS if l != label])
+            label = rng.choice([c for c in LABELS if c != label])
         labels.append(label)
     return texts, labels

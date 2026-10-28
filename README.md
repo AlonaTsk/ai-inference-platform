@@ -22,7 +22,7 @@ More detail: [architecture](docs/architecture.md) · [GPU](docs/gpu.md) · [desi
 | Model latency (CPU, batch 1) | 0.56 ms p50 |
 | End-to-end latency via API (concurrency 1) | 3.7 ms p50, 251 req/s |
 | GPU: PyTorch model on Tesla T4 (Colab) | batch 4096: 3.3 ms FP32 / 1.1 ms FP16, about 14× / 43× faster than a 16-thread laptop CPU; batch 1: the CPU is about 2× faster ([details](docs/gpu.md#gpu-results-tesla-t4-google-colab)) |
-| Tests | 13 Go test cases + 17 pytest cases (one CUDA-only, skipped without a GPU) + an end-to-end script run on kind in CI |
+| Tests | 15 Go test cases + 18 pytest cases (one CUDA-only, skipped without a GPU) + an end-to-end script run on kind in CI |
 
 > **The data is synthetic.** The tickets are generated from templates, with cross-class distractor phrases and 5% deliberately flipped labels (see [decisions](docs/decisions.md#3-synthetic-data-explicitly-labelled-as-such)). About 95% is roughly the best any model can score on this data, so these numbers show the pipeline works. They do not predict accuracy on real tickets.
 
@@ -42,7 +42,7 @@ docs/                 Architecture, decisions, troubleshooting, metrics
 
 ## Prerequisites
 
-Go 1.23+, Python 3.10+, Docker, plus [kind](https://kind.sigs.k8s.io/docs/user/quick-start/) and kubectl for the Kubernetes part.
+Go 1.26+, Python 3.10+, Docker, plus [kind](https://kind.sigs.k8s.io/docs/user/quick-start/) and kubectl for the Kubernetes part.
 
 ## Run it
 
@@ -50,7 +50,8 @@ Go 1.23+, Python 3.10+, Docker, plus [kind](https://kind.sigs.k8s.io/docs/user/q
 
 ```bash
 make venv          # create .venv and install Python deps
-make test          # go vet + go test -race, pytest
+make lint          # gofmt, go vet, staticcheck, ruff (lint + format), mypy
+make test          # go test -race, pytest
 make train         # train, print the classification report, write inference/model/
 ```
 
@@ -106,7 +107,8 @@ The ticket above mixes two topics, so the confidence is lower and "technical" sc
 | Status | When |
 |---|---|
 | 200 | Prediction returned |
-| 400 | Body is not `{"text": "..."}`, the text is empty, or it is longer than 2000 characters |
+| 400 | Body is not a single JSON object `{"text": "..."}`, the text is empty, or it is longer than 2000 characters |
+| 413 | Body is larger than 16 KiB |
 | 502 | Inference service unreachable, returned an error, or returned an invalid response |
 | 504 | Inference service did not answer within `INFERENCE_TIMEOUT` (default 3s) |
 
