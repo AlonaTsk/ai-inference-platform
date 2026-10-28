@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l api)"
+      - name: vet and test
+        working-directory: api
+        run: go vet ./... && go test -race -count=1 ./...
+
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: inference
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: inference/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - name: train and print held-out metrics
+        run: python -m app.train --out model && cat model/metrics.json
+
+  kind-e2e:
+    needs: [go, python]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build images
+        run: docker compose build
+      - uses: helm/kind-action@v1.12.0
+        with:
+          cluster_name: ai-inference
+          config: deployments/k8s/kind-config.yaml
+      - name: deploy
+        run: |
+          kind load docker-image ai-inference-platform/api:dev ai-inference-platform/inference:dev --name ai-inference
+          kubectl apply -k deployments/k8s
+          kubectl -n ai-inference rollout status deploy/inference --timeout=180s
+          kubectl -n ai-inference rollout status deploy/api --timeout=180s
+          kubectl -n ai-inference get pods,svc -o wide
+      - name: end-to-end test
+        run: |
+          kubectl -n ai-inference port-forward svc/api 8080:80 &
+          sleep 3
+          tests/e2e.sh http://localhost:8080
+      - name: diagnostics on failure
+        if: failure()
+        run: |
+          kubectl -n ai-inference get pods -o wide
+          kubectl -n ai-inference describe pods
+          kubectl -n ai-inference logs -l app=api --tail=50
+          kubectl -n ai-inference logs -l app=inference --tail=50

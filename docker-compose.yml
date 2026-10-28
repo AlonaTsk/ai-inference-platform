@@ -1,0 +1,21 @@
+services:
+  inference:
+    build: ./inference
+    image: ai-inference-platform/inference:dev
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/readyz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./api
+    image: ai-inference-platform/api:dev
+    environment:
+      INFERENCE_URL: http://inference:8000
+      INFERENCE_TIMEOUT: 3s
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      inference:
+        condition: service_healthy
