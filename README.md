@@ -11,7 +11,7 @@ client ──► Go API (validation, timeouts, error mapping) ──► Python i
            Deployment ×2 + Service                          Deployment ×2 + Service
 ```
 
-More detail: [architecture](docs/architecture.md) · [design decisions](docs/decisions.md) · [troubleshooting log](docs/troubleshooting.md) · [benchmarks](benchmarks/RESULTS.md)
+More detail: [architecture](docs/architecture.md) · [GPU](docs/gpu.md) · [design decisions](docs/decisions.md) · [troubleshooting log](docs/troubleshooting.md) · [benchmarks](benchmarks/RESULTS.md)
 
 ## Results at a glance
 
@@ -21,7 +21,7 @@ More detail: [architecture](docs/architecture.md) · [design decisions](docs/dec
 | Accuracy / macro F1 | **0.954 / 0.954** ([full metrics + confusion matrix](docs/metrics.json)) |
 | Model latency (CPU, batch 1) | 0.56 ms p50 |
 | End-to-end latency via API (concurrency 1) | 3.7 ms p50, 251 req/s |
-| Tests | 13 Go test cases + 10 pytest cases + an end-to-end script run on kind in CI |
+| Tests | 13 Go test cases + 17 pytest cases (one CUDA-only, skipped without a GPU) + an end-to-end script run on kind in CI |
 
 > **The data is synthetic.** The tickets are generated from templates, with cross-class distractor phrases and 5% deliberately flipped labels (see [decisions](docs/decisions.md#3-synthetic-data-explicitly-labelled-as-such)). About 95% is roughly the best any model can score on this data, so these numbers show the pipeline works. They do not predict accuracy on real tickets.
 
@@ -31,7 +31,9 @@ More detail: [architecture](docs/architecture.md) · [design decisions](docs/dec
 api/                  Go service: POST /v1/predict, /healthz, /readyz
 inference/            Python: data generator, training, FastAPI inference service, tests
 deployments/k8s/      Namespace, ConfigMap, Deployments, Services (Kustomize) + kind config
+                      gpu/: GPU benchmark Job; gpu-mock/: kind overlay for the mocked-GPU demo
 benchmarks/           CPU benchmark scripts and recorded results
+gpu/                  PyTorch model, CUDA-aware CPU/GPU benchmark, Colab notebook
 tests/e2e.sh          End-to-end smoke test against a running stack
 .github/workflows/    CI: Go tests, Python tests + training, kind deploy + e2e
 docs/                 Architecture, decisions, troubleshooting, metrics
@@ -128,13 +130,15 @@ The inference service also exposes `GET /metadata`, which returns the training m
 
 `make bench` runs both CPU benchmarks. The recorded results, hardware and limitations are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md). In short, the model takes about 0.6 ms per ticket. Throughput levels off at about 400 req/s because of the single Python HTTP worker, not the model.
 
-**No GPU benchmark has been done yet.** It is listed as future work with the method it would need.
+### GPU
+
+[`gpu/`](gpu) contains a PyTorch version of the classifier and a CUDA-aware benchmark. It covers warmup, `torch.cuda.synchronize()`, compute versus end-to-end timing including host↔device copies, and FP16. It also has a Kubernetes GPU Job (`nvidia.com/gpu` limits, tolerations) and a scheduling demo on kind with a **mocked** GPU. It has been tested on CPU only; **real GPU numbers are pending** a run of the [Colab notebook](gpu/colab_benchmark.ipynb). Details: [docs/gpu.md](docs/gpu.md).
 
 ## Limitations and next steps
 
 - The data is synthetic; the next step is real labelled tickets and a confidence-calibration check.
 - The model is trained at image build time; in production it would be a versioned artifact.
 - There is no Ingress, TLS, autoscaling or metrics endpoint yet.
-- GPU inference has not been implemented or benchmarked.
+- GPU benchmark numbers have not been measured yet; the code and Colab notebook are ready (see [docs/gpu.md](docs/gpu.md)).
 
 See [docs/decisions.md](docs/decisions.md#what-i-would-change-before-production) for the full list.

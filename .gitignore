@@ -5,3 +5,5 @@ __pycache__/
 inference/model/
 .DS_Store
 /bin/
+dist/
+.venv-gpu/

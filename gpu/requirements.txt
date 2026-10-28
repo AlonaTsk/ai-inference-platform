@@ -1,0 +1,5 @@
+# CPU wheel by default; for NVIDIA GPUs install from the CUDA index, e.g.
+#   pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+# (Intel Macs only have wheels up to torch 2.2.2.)
+torch>=2.2
+pytest>=8

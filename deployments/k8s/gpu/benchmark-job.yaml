@@ -1,0 +1,39 @@
+# One-off GPU benchmark. Not part of the base kustomization: it only schedules
+# on a node that advertises nvidia.com/gpu (installed by the NVIDIA device
+# plugin / GPU Operator on a real GPU node).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-benchmark
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels: {app: gpu-benchmark}
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+      # GPU nodes are commonly tainted so ordinary pods do not land on them.
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: benchmark
+          image: ai-inference-platform/gpu-bench:cu124
+          imagePullPolicy: IfNotPresent
+          # Fail loudly if no CUDA device is visible instead of silently
+          # benchmarking the CPU and calling it a GPU result.
+          args: ["--require-cuda", "--fp16", "--json", "/tmp/results.json"]
+          resources:
+            requests: {cpu: "1", memory: 2Gi}
+            limits:
+              memory: 4Gi
+              # Extended resource: whole GPUs only, requests must equal limits
+              # (set only limits and Kubernetes copies them to requests).
+              nvidia.com/gpu: 1
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}

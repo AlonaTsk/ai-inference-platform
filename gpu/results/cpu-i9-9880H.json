@@ -1,0 +1,99 @@
+{
+  "environment": {
+    "measured_at": "2026-10-28T15:34:07+00:00",
+    "python": "3.10.11",
+    "torch": "2.2.2",
+    "cpu": "i386",
+    "cpu_threads_used": 8,
+    "logical_cpus": 16,
+    "cuda_available": false
+  },
+  "train": {
+    "device": "cpu",
+    "seconds": 5.7,
+    "accuracy": 0.9275,
+    "macro_f1": 0.9272,
+    "n_test": 800
+  },
+  "settings": {
+    "batches": "1,32,256,1024,4096",
+    "warmup": 20,
+    "iters": 50,
+    "epochs": 8,
+    "fp16": false,
+    "require_cuda": false,
+    "json": "/private/tmp/claude-501/-Users-nataliiavoronkova-AI-project/3d6d92f4-a02a-4f5f-8447-2b7cde11842e/scratchpad/cpu.json"
+  },
+  "results": [
+    {
+      "device": "cpu",
+      "batch": 1,
+      "compute": {
+        "p50_ms": 0.148,
+        "p95_ms": 0.1891,
+        "texts_per_s": 6755
+      },
+      "end_to_end": {
+        "p50_ms": 0.1701,
+        "p95_ms": 0.3522,
+        "texts_per_s": 5879
+      }
+    },
+    {
+      "device": "cpu",
+      "batch": 32,
+      "compute": {
+        "p50_ms": 0.3837,
+        "p95_ms": 0.5748,
+        "texts_per_s": 83408
+      },
+      "end_to_end": {
+        "p50_ms": 0.5215,
+        "p95_ms": 0.7594,
+        "texts_per_s": 61356
+      }
+    },
+    {
+      "device": "cpu",
+      "batch": 256,
+      "compute": {
+        "p50_ms": 2.2221,
+        "p95_ms": 3.4355,
+        "texts_per_s": 115207
+      },
+      "end_to_end": {
+        "p50_ms": 1.9423,
+        "p95_ms": 3.2467,
+        "texts_per_s": 131799
+      }
+    },
+    {
+      "device": "cpu",
+      "batch": 1024,
+      "compute": {
+        "p50_ms": 8.1385,
+        "p95_ms": 10.2729,
+        "texts_per_s": 125821
+      },
+      "end_to_end": {
+        "p50_ms": 7.9693,
+        "p95_ms": 10.4367,
+        "texts_per_s": 128493
+      }
+    },
+    {
+      "device": "cpu",
+      "batch": 4096,
+      "compute": {
+        "p50_ms": 43.3117,
+        "p95_ms": 48.6931,
+        "texts_per_s": 94570
+      },
+      "end_to_end": {
+        "p50_ms": 45.9396,
+        "p95_ms": 57.8334,
+        "texts_per_s": 89161
+      }
+    }
+  ]
+}

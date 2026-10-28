@@ -4,7 +4,7 @@
 **Hardware:** MacBook Pro, Intel Core i9-9880H (8 cores / 16 threads, 2.3 GHz), macOS, Docker Desktop
 **Model:** TF-IDF (1–2-grams) + logistic regression, 4 classes, scikit-learn 1.5.2
 
-> **No GPU benchmark has been run.** This machine has no NVIDIA GPU, and a linear model on sparse TF-IDF features would not benefit from one anyway. See "GPU: not yet done" below.
+> These results are for the scikit-learn service. It runs on CPU only; a linear model on sparse TF-IDF features would not benefit from a GPU. GPU work is under [GPU](#gpu).
 
 ## 1. Model only, in-process (`model_bench.py`)
 
@@ -42,12 +42,6 @@ Path: client → Go API (Docker Compose) → Python inference (1 uvicorn worker)
 - The runs are short and single, with no repeated trials or confidence intervals.
 - The results are from Docker Compose, not kind.
 
-## GPU: not yet done
+## GPU
 
-A GPU comparison needs real GPU access (for example a Colab or cloud instance) and a model that uses one (for example a small PyTorch text classifier). A correct GPU benchmark must:
-- warm up the model first (CUDA context creation and kernel selection),
-- call `torch.cuda.synchronize()` before reading timers, because CUDA calls are asynchronous,
-- report the GPU model, driver/CUDA version, batch sizes and whether data-transfer time is included,
-- compare against the same model on CPU.
-
-Running a GPU notebook is a separate exercise from scheduling GPU workloads on Kubernetes (device plugin, `nvidia.com/gpu` resource limits). This repository does neither yet.
+The PyTorch model, the CUDA-aware benchmark and the Colab notebook are in [`gpu/`](../gpu). Method, CPU results and the pending GPU run are described in [docs/gpu.md](../docs/gpu.md). Note that this file benchmarks the scikit-learn model, while `gpu/` benchmarks a different (PyTorch) model, so the numbers are not directly comparable.

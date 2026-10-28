@@ -51,3 +51,34 @@ kind-down:
 bench: train
 	$(PY) benchmarks/model_bench.py --model inference/model/model.joblib
 	$(PY) benchmarks/http_bench.py --url http://localhost:$(API_PORT) -c 8
+
+# --- GPU (PyTorch) ---------------------------------------------------------
+GPU_PY ?= .venv-gpu/bin/python
+
+.PHONY: gpu-test gpu-bench gpu-image gpu-zip gpu-mock-demo
+
+gpu-test:
+	cd gpu && ../$(GPU_PY) -m pytest -q -rs
+
+gpu-bench:
+	cd gpu && ../$(GPU_PY) benchmark.py
+
+gpu-image:
+	docker build -f gpu/Dockerfile -t ai-inference-platform/gpu-bench:cpu .
+
+# Upload bundle for Colab when the repo is not cloneable.
+gpu-zip:
+	mkdir -p dist && rm -f dist/gpu-bench.zip
+	zip -q dist/gpu-bench.zip gpu/textclf.py gpu/benchmark.py gpu/test_textclf.py \
+		inference/app/__init__.py inference/app/data.py
+	@echo "wrote dist/gpu-bench.zip"
+
+# Scheduling demo on kind with a FAKE nvidia.com/gpu (see docs/gpu.md). The Job is expected to fail.
+gpu-mock-demo: gpu-image
+	kind load docker-image ai-inference-platform/gpu-bench:cpu --name $(CLUSTER)
+	kubectl apply -k deployments/k8s/gpu-mock
+	sleep 5; kubectl -n $(NS) get pods -l app=gpu-benchmark
+	deployments/k8s/gpu/mock-gpu-node.sh add
+	sleep 20; kubectl -n $(NS) get pods -l app=gpu-benchmark; kubectl -n $(NS) logs job/gpu-benchmark || true
+	kubectl -n $(NS) delete job gpu-benchmark
+	deployments/k8s/gpu/mock-gpu-node.sh remove

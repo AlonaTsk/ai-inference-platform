@@ -1,0 +1,10 @@
+# Mock-GPU overlay for kind: same Job, but with the CPU image, so the
+# scheduling demo does not need a multi-GB CUDA image. Pair it with
+# ../gpu/mock-gpu-node.sh. The Job is EXPECTED to fail with "CUDA is not available".
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../gpu
+images:
+  - name: ai-inference-platform/gpu-bench
+    newTag: cpu

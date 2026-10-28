@@ -36,6 +36,24 @@ jobs:
       - name: train and print held-out metrics
         run: python -m app.train --out model && cat model/metrics.json
 
+  gpu-module:
+    # Runs the PyTorch code on CPU; the CUDA-only test is skipped (no GPU runners).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu && pip install numpy pytest
+      - name: tests
+        working-directory: gpu
+        run: python -m pytest -q -rs
+      - name: benchmark smoke run (CPU)
+        working-directory: gpu
+        run: python benchmark.py --batches 1,64 --iters 20 --epochs 2
+      - name: Kubernetes GPU manifests build
+        run: kubectl kustomize deployments/k8s/gpu && kubectl kustomize deployments/k8s/gpu-mock
+
   kind-e2e:
     needs: [go, python]
     runs-on: ubuntu-latest
