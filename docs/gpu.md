@@ -45,7 +45,7 @@ Raw data: [gpu/results/cpu-i9-9880H.json](../gpu/results/cpu-i9-9880H.json). Thi
 
 ### GPU results: Tesla T4, Google Colab
 
-**Measured:** 2026-10-28, Tesla T4 (15.6 GB), CUDA runtime 13.0, cuDNN 9.27, torch 2.11.0+cu130, Python 3.13. Settings: 20 warmup + 100 timed iterations per batch size. The model was trained on the GPU for 8 epochs in 2.9 s, reaching held-out **accuracy 0.931, macro F1 0.931**. Raw data: [gpu/results/colab-t4.json](../gpu/results/colab-t4.json).
+**Measured:** 2026-10-28, Tesla T4 (15.6 GB), CUDA runtime 13.0, cuDNN 9.27, torch 2.11.0+cu130, Python 3.13. Settings: 20 warmup + 100 timed iterations per batch size. The model was trained on the GPU for 8 epochs in 2.9 s, reaching held-out **accuracy 0.931, macro F1 0.931**. In the same session the unit tests gave `6 passed, 1 skipped`. `test_cuda_matches_cpu_predictions` passed, so GPU outputs match CPU outputs within 1e-4 for the same weights. The skipped test checks the *no-CUDA* error path and only applies without a GPU. Raw data: [gpu/results/colab-t4.json](../gpu/results/colab-t4.json).
 
 End-to-end p50 latency and throughput (including host↔device copies), all measured in the same Colab session:
 
