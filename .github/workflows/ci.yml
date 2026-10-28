@@ -9,10 +9,11 @@ jobs:
   go:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: api/go.mod
+          cache: false  # stdlib only, no go.sum to key a cache on
       - name: gofmt
         run: test -z "$(gofmt -l api)"
       - name: vet and test
@@ -25,8 +26,8 @@ jobs:
       run:
         working-directory: inference
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -40,8 +41,8 @@ jobs:
     # Runs the PyTorch code on CPU; the CUDA-only test is skipped (no GPU runners).
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - run: pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu && pip install numpy pytest
@@ -58,7 +59,7 @@ jobs:
     needs: [go, python]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: build images
         run: docker compose build
       - uses: helm/kind-action@v1.12.0
